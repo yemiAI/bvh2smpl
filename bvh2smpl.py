@@ -109,7 +109,7 @@ def bvh2smpl(model_path: str, bvhfile: str, output: str, mirror: bool,
     # Load the SMPL model
     #smpl_model = smplx.create(model_path, model_type='smpl', gender='MALE')
     
-    args = parse_args()
+    #args = parse_args()
 
     # Load the BVH file
     with open(args.bvhfile) as fp:
@@ -159,6 +159,6 @@ def bvh2smpl(model_path: str, bvhfile: str, output: str, mirror: bool,
     
     
 
-#if __name__ == "__main__":
- #   args = parse_args()
-  #  bvh2smpl(args.model_path, args.bvhfile, args.output, args.mirror, gender=args.gender, fps=args.fps)
+if __name__ == "__main__":
+    args = parse_args()
+    bvh2smpl(args.model_path, args.bvhfile, args.output, args.mirror, gender=args.gender, fps=args.fps)
