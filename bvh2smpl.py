@@ -1,4 +1,3 @@
-#import torch
 import numpy as np
 import argparse
 import pickle
@@ -16,8 +15,9 @@ def parse_args():
     parser.add_argument("--fps", type=int, default=60)
     parser.add_argument("--output", type=str, default="data/gWA_sFM_cAll_d27_mWA5_ch20.bvh")
     parser.add_argument("--mirror", action="store_true")
-    parser.add_argument("bvhfile", type = str)
+    parser.add_argument("bvhfile", type=str)
     return parser.parse_args()
+
 
 def euler_to_axis_angle(euler_angles):
     # Convert Euler angles to axis-angle representation (adjust as needed for your BVH data)
@@ -39,119 +39,109 @@ def mirror_rot_trans(lrot, trans, names, parents):
     trans_mirror = mirror_pos * trans
     grot_mirror = mirror_rot * grot[:,joints_mirror]
 
-    return quat.ik_rot(grot_mirror, parents), trans_mirror
+    return quat.ik_rot(grot_mirror, parents)
 
 
-def bvh2smpl(model_path:str , poses:str , output:str, mirror:bool, 
-             model_type='bvh', gender='MALE', fps=120)-> None:
+def bvh2smpl(model_path: str, poses: str, output: str, mirror: bool,
+             model_type='bvh', gender='MALE', fps=120):
     """Save SMPL file created by bvh parameters.
 
     Args:
         model_path(str): path to bvh models
-        poses (str): Path to 
-        output (str): Where to save SMPL. 
-        mirror (bool):  Whether save mirror motion or not. 
+        poses (str): Path to
+        output (str): Where to save SMPL.
+        mirror (bool):  Whether save mirror motion or not.
         fps(int, optional): Frame per second. Default to 120.
-        """
-    names = ["Hips", 
-             "Spine", 
-             "Spine1", 
-             "Neck", 
-             "Head", 
-             "LeftShoulder", 
-             "LeftArm", 
-             "LeftForeArm", 
-             "LeftHand", 
-             "LeftHandThumb1", 
-             "LeftHandThumb2", 
-             "LeftHandThumb3", 
-             "LeftHandIndex1", 
-             "LeftHandIndex2", 
-             "LeftHandIndex3", 
-             "LeftHandMiddle1", 
-             "LeftHandMiddle2", 
+    """
+    names = ["Hips",
+             "Spine",
+             "Spine1",
+             "Neck",
+             "Head",
+             "LeftShoulder",
+             "LeftArm",
+             "LeftForeArm",
+             "LeftHand",
+             "LeftHandThumb1",
+             "LeftHandThumb2",
+             "LeftHandThumb3",
+             "LeftHandIndex1",
+             "LeftHandIndex2",
+             "LeftHandIndex3",
+             "LeftHandMiddle1",
+             "LeftHandMiddle2",
              "LeftHandMiddle3",
-             "LeftHandRing1", 
-             "LeftHandRing2", 
-             "LeftHandRing3", 
-             "LeftHandPinky1", 
-             "LeftHandPinky2", 
-             "LeftHandPinky3", 
-             "RightShoulder", 
+             "LeftHandRing1",
+             "LeftHandRing2",
+             "LeftHandRing3",
+             "LeftHandPinky1",
+             "LeftHandPinky2",
+             "LeftHandPinky3",
+             "RightShoulder",
              "RightArm",
              "RightForeArm",
              "RightHand",
              "RightHandThumb1",
              "RightHandThumb",
-             "RightHandThumb3", 
-             "RightHandIndex1", 
-             "RightHandIndex2", 
-             "RightHandIndex3", 
+             "RightHandThumb3",
+             "RightHandIndex1",
+             "RightHandIndex2",
+             "RightHandIndex3",
              "RightHandMiddle",
              "RightHandMiddle2",
              "RightHandMiddle3",
              "RightHandRing1",
-             "RightHandRing2", 
-             "RightHandRing3", 
+             "RightHandRing2",
+             "RightHandRing3",
              "RightHandPinky1",
              "RightHandPinky2",
              "RightHandPinky3",
              "LeftUpLeg",
-             "LeftLeg", 
-             "LeftFoot", 
-             "LeftToeBase", 
-             "RightUpLeg", 
-             "RightLeg", 
-             "RightFoot", 
+             "LeftLeg",
+             "LeftFoot",
+             "LeftToeBase",
+             "RightUpLeg",
+             "RightLeg",
+             "RightFoot",
              "RightToeBase"
-        ]
-        
+             ]
 
-        
-# Load the SMPL model
-smpl_model = smplx.create(model_path, model_type=model_type, gender=gender)
+    # Load the SMPL model
+    smpl_model = smplx.create(model_path, model_type=model_type, gender=gender)
 
-#model = bvh.create(model_path=model_path)
-#args = parse_args()
-with open (args.bvhfile) as fp:
-    model = Bvh(fp.read())
-    
-    
+    with open(args.poses, 'rb') as f:
+        poses_data = pickle.load(f)
+
     # Initialize arrays to store the converted poses
     out_poses = []
-    
-     for frame in range(bvh_data.nframes):
-            # Extract joint rotations from BVH data (you may need to adjust this based on your BVH file)
-            joint_rotations = []
-            for joint_name in names:
-                rotation = bvh_data.joint_channels(frame, joint_name)
-                joint_rotations.extend(rotation)
 
-            # Convert Euler angles to axis-angle representation
-            axis_angle_rotations = []
-            for i in range(0, len(joint_rotations), 3):
-                euler_angles = joint_rotations[i:i + 3]
-                axis_angle = euler_to_axis_angle(euler_angles)
-                axis_angle_rotations.extend(axis_angle)
+    for frame in range(poses_data['poses'].shape[0]):
+        # Extract joint rotations from BVH data (you may need to adjust this based on your BVH file)
+        joint_rotations = poses_data['poses'][frame]
 
-            # Adjust the axis-angle rotations for the BVH-to-SMPL bone mapping
-            if mirror:
-                # If mirroring, use mirror_rot_trans function to adjust rotations and translations
-                mirrored_rotations, mirrored_translation = mirror_rot_trans(axis_angle_rotations, np.zeros(3), names, [])
-                out_poses.append(np.concatenate((mirrored_rotations, mirrored_translation)))
-            else:
-                # Otherwise, use the axis-angle rotations as-is
-                out_poses.append(np.concatenate((axis_angle_rotations, np.zeros(3))))
-    
+        # Convert Euler angles to axis-angle representation
+        axis_angle_rotations = []
+        for i in range(0, len(joint_rotations), 3):
+            euler_angles = joint_rotations[i:i + 3]
+            axis_angle = euler_to_axis_angle(euler_angles)
+            axis_angle_rotations.extend(axis_angle)
+
+        # Adjust the axis-angle rotations for the BVH-to-SMPL bone mapping
+        if mirror:
+            # If mirroring, use mirror_rot_trans function to adjust rotations and translations
+            mirrored_rotations = mirror_rot_trans(axis_angle_rotations, np.zeros(3), names, [])
+            out_poses.append(mirrored_rotations)
+        else:
+            # Otherwise, use the axis-angle rotations as-is
+            out_poses.append(axis_angle_rotations)
+
     # Now using the bvh documentation at https://github.com/20tab/bvh-python, get what information you need to match the bvh file with the amass output
     # The files to output with bare AMASS are:
-    
+
     # ['poses', 'gender', 'mocap_framerate', 'betas', 'marker_data', 'dmpls', 'marker_labels', 'trans']
-        
-    
 
     # Gender is whatever you tell it to be
-    out_gender = np.array(args.gender)
+    out_gender = np.array(gender)
     
     # Maybe override this with args.fps if you like
     out_framerate = np.array(1.0 / model.frame_time)
