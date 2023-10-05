@@ -1,23 +1,19 @@
 import numpy as np
 import argparse
-import pickle
 import smplx
 from bvh import Bvh
 
-from utils import bvh, quat
-
+from utils import quat
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_path", type=str, default="data/smpl/")
     parser.add_argument("--gender", type=str, default="MALE", choices=["MALE", "FEMALE", "NEUTRAL"])
-    parser.add_argument("--poses", type=str, default="data/gWA_sFM_cAll_d27_mWA5_ch20.pkl")
     parser.add_argument("--fps", type=int, default=60)
-    parser.add_argument("--output", type=str, default="data/gWA_sFM_cAll_d27_mWA5_ch20.bvh")
+    parser.add_argument("--output", type=str, default="data/output.npz")
     parser.add_argument("--mirror", action="store_true")
     parser.add_argument("bvhfile", type=str)
     return parser.parse_args()
-
 
 def euler_to_axis_angle(euler_angles):
     # Convert Euler angles to axis-angle representation (adjust as needed for your BVH data)
@@ -25,7 +21,6 @@ def euler_to_axis_angle(euler_angles):
     angle = np.sqrt(roll**2 + pitch**2 + yaw**2)
     axis = np.array([roll, pitch, yaw]) / angle if angle != 0 else np.zeros(3)
     return axis * angle
-
 
 def mirror_rot_trans(lrot, trans, names, parents):
     joints_mirror = np.array([(
@@ -41,17 +36,18 @@ def mirror_rot_trans(lrot, trans, names, parents):
 
     return quat.ik_rot(grot_mirror, parents)
 
-
-def bvh2smpl(model_path: str, poses: str, output: str, mirror: bool,
+def bvh2smpl(model_path: str, bvhfile: str, output: str, mirror: bool,
              model_type='bvh', gender='MALE', fps=120):
-    """Save SMPL file created by bvh parameters.
+    """Convert BVH file to SMPL format and save as NPZ file.
 
     Args:
-        model_path(str): path to bvh models
-        poses (str): Path to
-        output (str): Where to save SMPL.
-        mirror (bool):  Whether save mirror motion or not.
-        fps(int, optional): Frame per second. Default to 120.
+        model_path (str): Path to SMPL model directory.
+        bvhfile (str): Path to BVH file to convert.
+        output (str): Path to save the converted SMPL NPZ file.
+        mirror (bool): Whether to save mirrored motion or not.
+        model_type (str, optional): Type of SMPL model (e.g., 'bvh'). Default is 'bvh'.
+        gender (str, optional): Gender of the SMPL model ('MALE', 'FEMALE', or 'NEUTRAL'). Default is 'MALE'.
+        fps (int, optional): Frame per second. Default is 120.
     """
     names = ["Hips",
              "Spine",
@@ -107,17 +103,21 @@ def bvh2smpl(model_path: str, poses: str, output: str, mirror: bool,
              ]
 
     # Load the SMPL model
-    smpl_model = smplx.create(model_path, model_type=model_type, gender=gender)
+    smpl_model = smplx.create(model_path, model_type='smpl', gender='MALE')
 
-    with open(args.poses, 'rb') as f:
-        poses_data = pickle.load(f)
+    # Load the BVH file
+    with open(bvhfile) as fp:
+        bvh_data = Bvh(fp.read())
 
     # Initialize arrays to store the converted poses
     out_poses = []
 
-    for frame in range(poses_data['poses'].shape[0]):
-        # Extract joint rotations from BVH data (you may need to adjust this based on your BVH file)
-        joint_rotations = poses_data['poses'][frame]
+    for frame in range(bvh_data.nframes):
+        # Extract joint rotations from BVH data
+        joint_rotations = []
+        for joint_name in names:
+            rotation = bvh_data.joint_channels(frame, joint_name)
+            joint_rotations.extend(rotation)
 
         # Convert Euler angles to axis-angle representation
         axis_angle_rotations = []
@@ -135,40 +135,19 @@ def bvh2smpl(model_path: str, poses: str, output: str, mirror: bool,
             # Otherwise, use the axis-angle rotations as-is
             out_poses.append(axis_angle_rotations)
 
-    # Now using the bvh documentation at https://github.com/20tab/bvh-python, get what information you need to match the bvh file with the amass output
-    # The files to output with bare AMASS are:
-
-    # ['poses', 'gender', 'mocap_framerate', 'betas', 'marker_data', 'dmpls', 'marker_labels', 'trans']
-
-    # Gender is whatever you tell it to be
+    # Prepare other SMPL parameters (you may need to customize this part)
     out_gender = np.array(gender)
-    
-    # Maybe override this with args.fps if you like
-    out_framerate = np.array(1.0 / model.frame_time)
-    
-    # Find out what 'betas' is and set the numbers appropriately. Alternatively: 
+    out_framerate = np.array(fps)
     out_betas = np.random.random([16])
-    
-    # Likewise with dmpls. Set to random, or zeros, or whatever
-    out_dmpls = np.zeros([model.nframes, 8])
-    
-    # and do something similar with marker_data and markers. It probably doesn't matter much what you put here, providing you can display the AMASS file, and it goes into your machine learning framework
+    out_dmpls = np.zeros([len(out_poses), 8])
+    out_trans = np.zeros([len(out_poses), 3])
 
-    # The equivalent of amass translation seems to be that of the *position components in the root bone of a BVH skeleton
-    out_trans = np.array([[model.frame_joint_channel(frame, 'Hips', pos) for pos in ['Xposition', 'Yposition', 'Zposition']] for frame in range(model.nframes)])
-    
-    # Poses is the hard bit. You have to do the conversion from BVH Euler Angles to the SMPL axis-angle format, doing the inverse operations to the one in the smpl2bvh script
-    # You also have to correspond the bones in the bvh with the output skeleton bones (hopefully it's a matching skeleton, otherwise you might have to build the appropriate skel)
-    
     # Convert the list of poses to a numpy array
     out_poses = np.array(out_poses)
-    
-    # When you're done, save
-    np.savez(args.output , gender = out_gender, mocap_framerate = out_framerate, betas = out_betas, dmpls = out_dmps, marker_labels = out_marker_labels, marker_data = out_marker_data, poses = out_poses, trans = out_trans)
-    
-    if __name__ == "__main__":
-        args = parse_args()
-        bvh2smpl(args.model_path, args.poses, args.output, args.mirror, gender=args.gender, fps=args.fps)
-    
-  
-    
+
+    # Save the SMPL parameters as an NPZ file
+    np.savez(output, gender=out_gender, mocap_framerate=out_framerate, betas=out_betas, dmpls=out_dmpls, poses=out_poses, trans=out_trans)
+
+if __name__ == "__main__":
+    args = parse_args()
+    bvh2smpl(args.model_path, args.bvhfile, args.output, args.mirror, gender=args.gender, fps=args.fps)
