@@ -122,7 +122,7 @@ def bvh2smpl(model_path: str, bvhfile: str, output: str, mirror: bool,
         # Extract joint rotations from BVH data
         joint_rotations = []
         for joint_name in names:
-            rotation = model.joint_channels(frame, joint_name)
+            rotation = [model.joint_channels(frame, joint_name, pos) for pos in ['Xrotation', 'Yrotation', 'Zrotation']]
             joint_rotations.extend(rotation)
 
         # Convert Euler angles to axis-angle representation
