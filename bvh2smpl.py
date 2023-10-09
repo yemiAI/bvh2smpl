@@ -122,9 +122,14 @@ def bvh2smpl(model_path: str, bvhfile: str, output: str, mirror: bool,
         # Extract joint rotations from BVH data
         joint_rotations = []
         for joint_name in names:
-            rotation = [model.joint_channels(frame, joint_name, pos) for pos in ['Xrotation', 'Yrotation', 'Zrotation']]
-            joint_rotations.extend(rotation)
 
+            if (joint_name in model.get_joints_names()):
+                rotation = model.frame_joint_channels(frame, joint_name, ['Xrotation', 'Yrotation', 'Zrotation'])
+            else:
+                rotation = [0.0, 0.0, 0.0]
+                
+            joint_rotations.extend(rotation)
+            
         # Convert Euler angles to axis-angle representation
         axis_angle_rotations = []
         for i in range(0, len(joint_rotations), 3):
@@ -149,13 +154,16 @@ def bvh2smpl(model_path: str, bvhfile: str, output: str, mirror: bool,
     out_dmpls = np.zeros([model.nframes, 8])
     
     out_trans = np.array([[model.frame_joint_channel(frame, 'Hips', pos) for pos in ['Xposition', 'Yposition', 'Zposition']] for frame in range(model.nframes)])
-    
 
+    # TODO: Populate these
+    out_marker_labels = np.array([])
+    out_marker_data = np.array([])
+    
     # Convert the list of poses to a numpy array
     out_poses = np.array(out_poses)
 
     # Save the SMPL parameters as an NPZ file
-    np.savez(args.output , gender = out_gender, mocap_framerate = out_framerate, betas = out_betas, dmpls = out_dmps, marker_labels = out_marker_labels, marker_data = out_marker_data, poses = out_poses, trans = out_trans)
+    np.savez(args.output , gender = out_gender, mocap_framerate = out_framerate, betas = out_betas, dmpls = out_dmpls, marker_labels = out_marker_labels, marker_data = out_marker_data, poses = out_poses, trans = out_trans)
     
     
 
