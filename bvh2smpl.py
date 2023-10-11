@@ -9,7 +9,7 @@ from utils import quat
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_path", type=str, default="data/smpl/")
-    parser.add_argument("--gender", type=str, default="MALE", choices=["MALE", "FEMALE", "NEUTRAL"])
+    parser.add_argument("--gender", type=str, default="male", choices=["male", "female", "neutral"])
     #the poses bit need to be fixed 
     parser.add_argument("--poses", type=str, default="data/trial.bvh")
     #fix it here 
