@@ -16,6 +16,9 @@ def parse_args():
     parser.add_argument("--fps", type=int, default=60)
     parser.add_argument("--output", type=str, default="data/output.npz")
     parser.add_argument("--mirror", action="store_true")
+    
+    parser.add_argument("--tpose", action="store_true")
+    
     parser.add_argument("bvhfile", type=str)
     return parser.parse_args()
 
@@ -41,7 +44,7 @@ def mirror_rot_trans(lrot, trans, names, parents):
     return quat.ik_rot(grot_mirror, parents)
 
 def bvh2smpl(model_path: str, bvhfile: str, output: str, mirror: bool,
-             model_type='bvh', gender='MALE', fps=120):
+             model_type='bvh', gender='male', fps=120):
     """Convert BVH file to SMPL format and save as NPZ file.
 
     Args:
@@ -116,55 +119,86 @@ def bvh2smpl(model_path: str, bvhfile: str, output: str, mirror: bool,
         model = Bvh(fp.read())
 
     # Initialize arrays to store the converted poses
-    out_poses = []
+    #out_poses = []
+    if not args.tpose:
 
-    for frame in range(model.nframes):
-        # Extract joint rotations from BVH data
-        joint_rotations = []
-        for joint_name in names:
+        out_poses = np.zeros([model.nframes,165])
 
-            if (joint_name in model.get_joints_names()):
-                rotation = model.frame_joint_channels(frame, joint_name, ['Xrotation', 'Yrotation', 'Zrotation'])
+        for frame in range(model.nframes):
+            # Extract joint rotations from BVH data
+            joint_rotations = []
+            for joint_name in names:
+
+                if (joint_name in model.get_joints_names()):
+                    rotation = model.frame_joint_channels(frame, joint_name, ['Xrotation', 'Yrotation', 'Zrotation'])
+                else:
+                    rotation = [0.0, 0.0, 0.0]
+
+                joint_rotations.extend(rotation)
+
+            # Convert Euler angles to axis-angle representation
+            axis_angle_rotations = []
+            for i in range(0, len(joint_rotations), 3):
+                euler_angles = joint_rotations[i:i + 3]
+                axis_angle = euler_to_axis_angle(euler_angles)
+                axis_angle_rotations.extend(axis_angle)
+
+            # Adjust the axis-angle rotations for the BVH-to-SMPL bone mapping
+            if mirror:
+                # If mirroring, use mirror_rot_trans function to adjust rotations and translations
+                mirrored_rotations = mirror_rot_trans(axis_angle_rotations, np.zeros(3), names, [])
+                out_poses[frame, :] = mirrored_rotations
             else:
-                rotation = [0.0, 0.0, 0.0]
-                
-            joint_rotations.extend(rotation)
-            
-        # Convert Euler angles to axis-angle representation
-        axis_angle_rotations = []
-        for i in range(0, len(joint_rotations), 3):
-            euler_angles = joint_rotations[i:i + 3]
-            axis_angle = euler_to_axis_angle(euler_angles)
-            axis_angle_rotations.extend(axis_angle)
+                # Otherwise, use the axis-angle rotations as-is
+                out_poses[frame, :] = axis_angle_rotations
 
-        # Adjust the axis-angle rotations for the BVH-to-SMPL bone mapping
-        if mirror:
-            # If mirroring, use mirror_rot_trans function to adjust rotations and translations
-            mirrored_rotations = mirror_rot_trans(axis_angle_rotations, np.zeros(3), names, [])
-            out_poses.append(mirrored_rotations)
-        else:
-            # Otherwise, use the axis-angle rotations as-is
-            out_poses.append(axis_angle_rotations)
+    else:
 
+        out_poses = np.zeros([model.nframes, 165])
+    
+
+    #amass_template = np.array([])                         
+    amass_template = np.load('salsa_1_stageii.npz', allow_pickle=True )
+    
+    #
+    #Create the pose_jaw and pose_eye arrays from np.zeros
+    
+    
+    #Create the root_orientation and pose_body and pose_hand arrays from poses
+    
+    #Pull the other files in the MoSH from a sample file
+
+        
     # Prepare other SMPL parameters (you may need to customize this part)
     out_gender = np.array(gender)
     out_framerate = np.array(1.0 / model.frame_time)
     out_betas = np.random.random([16])
     #out_dmpls = np.zeros([len(out_poses), 8])
     out_dmpls = np.zeros([model.nframes, 8])
+    out_mocaptime = np.array(model.frame_time * model.nframes)
     
+    print(out_poses.shape)
+    out_root_orient = out_poses[:, 0:3]
+    
+    out_pose_body = out_poses[:, 3:66]
+    out_pose_hand = out_poses[:, 75:165]
+    out_pose_jaw = np.zeros([model.nframes,6])
+    out_pose_eyes = np.zeros([model.nframes,6])
     out_trans = np.array([[model.frame_joint_channel(frame, 'Hips', pos) for pos in ['Xposition', 'Yposition', 'Zposition']] for frame in range(model.nframes)])
 
     # TODO: Populate these
     out_marker_labels = np.array([])
     out_marker_data = np.array([])
     
+    
+    
     # Convert the list of poses to a numpy array
     out_poses = np.array(out_poses)
 
     # Save the SMPL parameters as an NPZ file
-    np.savez(args.output , gender = out_gender, mocap_framerate = out_framerate, betas = out_betas, dmpls = out_dmpls, marker_labels = out_marker_labels, marker_data = out_marker_data, poses = out_poses, trans = out_trans)
+    np.savez(args.output , gender = out_gender, mocap_framerate = out_framerate, betas = out_betas, dmpls = out_dmpls, marker_labels = out_marker_labels, marker_data = out_marker_data, poses = out_poses, trans = out_trans, mocap_time_length = out_mocaptime, root_orient=out_root_orient, pose_body=out_pose_body, pose_hand= out_pose_hand, pose_eyes= out_pose_eyes)
     
+    np.savez("mosh_%s"%args.output,markers_latent=amass_template['markers_latent'],latent_labels=amass_template['latent_labels'], markers_latent_vids=amass_template['markers_latent_vids'], surface_model_type = amass_template['surface_model_type'], num_betas = amass_template['num_betas']) 
     
 
 if __name__ == "__main__":
