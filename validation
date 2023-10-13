@@ -1,0 +1,116 @@
+import numpy as np
+import argparse
+import smplx
+import pickle
+from bvh import Bvh
+
+from utils import quat
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model_path", type=str, default="data/smpl/")
+    parser.add_argument("--gender", type=str, default="male", choices=["male", "female", "neutral"])
+    #the poses bit need to be fixed 
+    parser.add_argument("--poses", type=str, default="data/trial.bvh")
+    #fix it here 
+    parser.add_argument("--fps", type=int, default=60)
+    parser.add_argument("--output", type=str, default="data/output.npz")
+    parser.add_argument("--mirror", action="store_true")
+    
+    parser.add_argument("--tpose", action="store_true")
+    parser.add_argument("--random", action="store_true")
+    
+    parser.add_argument("bvhfile", type=str)
+    return parser.parse_args()
+
+#def euler_to_axis_angle(euler_angles):
+    # Convert Euler angles to axis-angle representation (adjust as needed for your BVH data)
+ #   roll, pitch, yaw = euler_angles
+  #  angle = np.sqrt(roll**2 + pitch**2 + yaw**2)
+   # axis = np.array([roll, pitch, yaw]) / angle if angle != 0 else np.zeros(3)
+    #return axis * angle
+
+def mirror_rot_trans(lrot, trans, names, parents):
+    joints_mirror = np.array([(
+        names.index("Left"+n[5:]) if n.startswith("Right") else (
+        names.index("Right"+n[4:]) if n.startswith("Left") else
+        names.index(n))) for n in names])
+
+    mirror_pos = np.array([-1, 1, 1])
+    mirror_rot = np.array([1, 1, -1, -1])
+    grot = quat.fk_rot(lrot, parents)
+    trans_mirror = mirror_pos * trans
+    grot_mirror = mirror_rot * grot[:,joints_mirror]
+
+    return quat.ik_rot(grot_mirror, parents)
+
+def bvh2smpl(model_path: str, bvhfile: str, output: str, mirror: bool,
+             model_type='bvh', gender='male', fps=120):
+    """Convert BVH file to SMPL format and save as NPZ file.
+
+    Args:
+        model_path (str): Path to 
+        bvhfile (str): Path to BVH file to convert.
+        output (str): Path to save the converted SMPL NPZ file.
+        mirror (bool): Whether to save mirrored motion or not.
+        model_type (str, optional): Type of SMPL model (e.g., 'bvh'). Default is 'bvh'.
+        gender (str, optional): Gender of the SMPL model ('MALE', 'FEMALE', or 'NEUTRAL'). Default is 'MALE'.
+        fps (int, optional): Frame per second. Default is 120.
+    """
+    names = ["Hips",
+             "Spine",
+             "Spine1",
+             "Neck",
+             "Head",
+             "LeftShoulder",
+             "LeftArm",
+             "LeftForeArm",
+             "LeftHand",
+             "LeftHandThumb1",
+             "LeftHandThumb2",
+             "LeftHandThumb3",
+             "LeftHandIndex1",
+             "LeftHandIndex2",
+             "LeftHandIndex3",
+             "LeftHandMiddle1",
+             "LeftHandMiddle2",
+             "LeftHandMiddle3",
+             "LeftHandRing1",
+             "LeftHandRing2",
+             "LeftHandRing3",
+             "LeftHandPinky1",
+             "LeftHandPinky2",
+             "LeftHandPinky3",
+             "RightShoulder",
+             "RightArm",
+             "RightForeArm",
+             "RightHand",
+             "RightHandThumb1",
+             "RightHandThumb",
+             "RightHandThumb3",
+             "RightHandIndex1",
+             "RightHandIndex2",
+             "RightHandIndex3",
+             "RightHandMiddle",
+             "RightHandMiddle2",
+             "RightHandMiddle3",
+             "RightHandRing1",
+             "RightHandRing2",
+             "RightHandRing3",
+             "RightHandPinky1",
+             "RightHandPinky2",
+             "RightHandPinky3",
+             "LeftUpLeg",
+             "LeftLeg",
+             "LeftFoot",
+             "LeftToeBase",
+             "RightUpLeg",
+             "RightLeg",
+             "RightFoot",
+             "RightToeBase"
+             ]
+
+    # Load the SMPL model
+    #smpl_model = smplx.create(model_path, model_type='smpl', gender='MALE')
+    
+    #args = parse_args()
